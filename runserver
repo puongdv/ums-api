@@ -1,0 +1,115 @@
+#!/bin/bash
+cd `dirname $0`
+
+# SO Configuration
+JAVA_HOME=/home/phuongdv/downloads/jdk1.8.0_131
+XMX=512M
+PID_FILE=./tmp/service.pid
+
+# No need change
+LOG_FILE=./log/runserver.log
+JAR_FILE=app.jar
+APP_NAME=ums-api
+APP_ENV=localhost
+
+#########################################
+function status {
+    if ps -p $1 | grep $1 > /dev/null
+    then
+        return 0
+    else
+        return 1
+    fi
+}
+
+function start {
+	if [ -f $PID_FILE ]; then
+		read pid <$PID_FILE
+		if `status $pid`; then
+			echo "Service is already running."
+			return
+		fi
+	fi
+	nohup $JAVA_HOME/bin/java -cp lib \
+	-Xmx$XMX \
+	-Dappname=$APP_NAME \
+	-Dappenv=$APP_ENV \
+	-Dpidpath=$PID_FILE \
+	-Djava.library.path=$JAVA_HOME \
+	-Dfile.encoding=UTF-8 \
+	-jar ./$JAR_FILE \
+	>>$LOG_FILE 2>&1 &
+	printf "Loading "
+	for i in {1..3}
+		do
+			sleep 1
+			printf "."
+		done
+	if [ -f $PID_FILE ]; then
+		for i in {1..10}
+		do
+			read pid <$PID_FILE
+			if `status $pid`; then
+				echo ""
+				echo "Service started. PID: $pid"
+				return
+			else
+				printf "."
+				sleep 1
+			fi
+		done
+		echo " Service failed to start. See log for more info."
+	else
+		echo "Service failed to start. See log for more info."
+	fi
+}
+
+function stop {
+	read pid <$PID_FILE
+	if `status $pid`; then
+		kill -9 $pid
+	else
+		echo "Service is not running."
+		return 1
+	fi
+	printf "Waiting for the service to finish stopping."
+	sleep 1
+	while [ 1 ]
+	do
+		if ps -p $pid | grep $pid > /dev/null
+		then
+			printf "."
+			sleep 1
+		else
+			break
+		fi
+	done
+	echo " DONE!"
+	return 0
+}
+
+case "$1" in
+	start)
+		start
+	;;
+	stop)
+		stop
+	;;
+	restart)
+		if stop; then
+			start
+		fi
+	;;
+	status)
+		read pid <$PID_FILE
+		if `status $pid`; then
+			echo "Service is running. PID: $pid"
+		else
+			echo "Service is not running."
+		fi
+	;;
+	*)
+	echo "Usage: `basename $0` start|stop|restart|status"
+	exit 1
+esac
+exit 0
